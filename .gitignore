@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+.pytest_cache/
+ios/Sightline.xcodeproj/
+ios/build/
+ios/Sightline/Info.plist
+.DS_Store
+tools/
+server/data/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/release.keystore
+android/keystore.properties
+
+# AI model weights (third-party; see MODELS.md)
+*.mlpackage/
+*.mlmodel
+*.pt
+*.apk
