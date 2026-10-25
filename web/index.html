@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FindMyTeam · Command</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <canvas id="map"></canvas>
+  <canvas id="map3d" hidden></canvas>
+  <div id="toolbar">
+    <button id="mode" title="Switch 2D map / 3D view (3)">3D view</button>
+    <button id="fit" class="on only2d" title="Keep everything in view (F)">Auto-fit</button>
+    <button id="follow" title="Follow selected responder (L)">Follow</button>
+    <button id="trails" class="on" title="Toggle breadcrumbs (T)">Trails</button>
+    <button id="cov" class="on" title="Search coverage heatmap (C)">Coverage</button>
+    <button id="pts" title="Show raw 3D points instead of fused surfaces">Points</button>
+    <span class="sep"></span>
+    <button class="only2d" data-pin="rally" title="Drop a rally point">+ Rally</button>
+    <button class="only2d" data-pin="hazard" title="Drop a hazard">+ Hazard</button>
+    <button class="only2d" data-pin="victim" title="Drop a victim marker">+ Victim</button>
+    <button class="only2d adminonly wpbtn" data-pin="waypoint" title="Drop route waypoints (click several spots; Esc to stop)">+ Waypoint</button>
+  </div>
+  <div id="hint"></div>
+  <div id="labelbar" hidden>
+    <span id="lbname"></span>
+    <span class="seg small"><button data-area="A">A · train</button><button data-area="B">B · test</button><button data-area="C">C · spare</button></span>
+    <span class="seg small"><button data-tool="room">Room</button><button data-tool="risk">Fall-risk spot</button></span>
+    <button id="lbundo">Undo</button><button id="lbsave" class="primary">Save labels</button><button id="lbdone">Done</button>
+    <div id="lbhint" class="dim small"></div>
+  </div>
+  <div id="alerts"></div>
+  <div id="toast"></div>
+  <div id="scale" class="only2d"></div>
+  <button id="askbtn" class="adminonly" title="Ask Gemini about the incident (A)"><svg class="spark" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="spk1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f8bff"/><stop offset="0.55" stop-color="#9b72ff"/><stop offset="1" stop-color="#ff6f91"/></linearGradient></defs><path fill="url(#spk1)" d="M12 1.5c.6 5.6 4.9 9.9 10.5 10.5-5.6.6-9.9 4.9-10.5 10.5C11.4 16.9 7.1 12.6 1.5 12 7.1 11.4 11.4 7.1 12 1.5z"/></svg><span>Ask</span></button>
+</main>
+<div id="askview" class="adminonly" hidden>
+  <div class="askpanel">
+    <header class="askhead">
+      <svg class="spark" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="spk2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f8bff"/><stop offset="0.55" stop-color="#9b72ff"/><stop offset="1" stop-color="#ff6f91"/></linearGradient></defs><path fill="url(#spk2)" d="M12 1.5c.6 5.6 4.9 9.9 10.5 10.5-5.6.6-9.9 4.9-10.5 10.5C11.4 16.9 7.1 12.6 1.5 12 7.1 11.4 11.4 7.1 12 1.5z"/></svg>
+      <div><h1>Ask Gemini</h1><div class="dim small">Answers use the live situation on this map. You advise; you decide.</div></div>
+      <button id="askkeybtn" class="link" hidden>Change key</button>
+      <button id="askclear" class="link">New chat</button>
+      <button id="askclose" aria-label="Close (Esc)">Close</button>
+    </header>
+    <div id="asklog" aria-live="polite"></div>
+    <div id="asksugg">
+      <button data-q="Where is everyone right now, and who is closest to the nearest exit?">Where is everyone?</button>
+      <button data-q="Are there any alerts or hazards I should act on right now?">Alerts and hazards</button>
+      <button data-q="Which areas are still unsearched, and who should go there?">What's unsearched?</button>
+      <button data-q="Summarise the last few minutes of the incident in 4 bullet points.">Summarise last minutes</button>
+    </div>
+    <form id="askform">
+      <textarea id="askinput" rows="2" maxlength="4000" placeholder="Type a rescuer's question, e.g. Is there another way out of the east room?"></textarea>
+      <button id="asksend" class="primary" type="submit">Ask</button>
+    </form>
+    <div class="dim small asknote">Each question is sent to Google Gemini with a text summary of the incident (names, positions, alerts, hazards). No camera images.</div>
+  </div>
+</div>
+<div id="markerview" hidden>
+  <div class="mtools"><button id="mk-smaller" title="Slightly smaller">−</button><button id="mk-bigger" title="Slightly larger">+</button><button id="mk-close">Close (Esc)</button></div>
+  <img id="mk-img" src="/static/marker.png" alt="FindMyTeam entrance marker">
+  <div class="ruler" id="mk-ruler"></div>
+  <div class="mtext">Ruler = <b>10 cm</b>: check it with a real ruler, adjust with − / + if needed.<br>
+    Phones: point at this screen from about 40 cm, face-on, until it says Locked. Keep the laptop still during the session.</div>
+</div>
+<aside>
+  <header>
+    <div class="brand"><span class="logo">FMT</span><h1>FindMyTeam<small>Command</small></h1></div>
+    <div id="conn" class="bad">offline</div>
+  </header>
+  <div id="join" class="adminonly">Phones connect securely to <b id="addr">…</b>
+    <button id="pair" class="primary">+ Add phone</button></div>
+  <section id="pairbox" class="adminonly" hidden>
+    <h2>Pair a phone <button id="pairclose" class="link">close</button></h2>
+    <div id="qr"></div>
+    <div id="paircount"></div>
+    <div id="pairinfo"></div>
+    <div id="apkbox" hidden>
+      <h2>Android: first install</h2>
+      <div id="apkqr"></div>
+      <div id="apkinfo"></div>
+    </div>
+  </section>
+  <section>
+    <h2>Decisions <span id="eta"></span></h2>
+    <ul id="decisions"></ul>
+    <div class="row adminonly budget"><label for="budget">Time budget per responder</label>
+      <input id="budget" type="number" min="1" max="240" step="1" value="20"> min</div>
+  </section>
+  <section id="routebox" hidden>
+    <h2>Waypoint route <span id="routesum"></span></h2>
+    <ul id="routelist"></ul>
+    <div class="row adminonly routectl">
+      <select id="routewho"><option value="">Not assigned</option></select>
+      <label class="dim small"><input type="checkbox" id="routehome" checked> End back at command</label>
+    </div>
+    <div class="row adminonly"><button id="routebest">Best order</button><button id="routeclear" class="danger">Clear route</button></div>
+  </section>
+  <section>
+    <h2>Responders <span id="count"></span></h2>
+    <ul id="phones"></ul>
+  </section>
+  <section id="feedbox" hidden>
+    <h2 id="feedtitle">Live view</h2>
+    <img id="feed" alt="Live camera of the selected responder">
+    <div id="feedmeta"></div>
+  </section>
+  <section>
+    <h2>Timeline</h2>
+    <ul id="timeline"></ul>
+  </section>
+  <section class="adminonly">
+    <h2>Entrance marker</h2>
+    <div class="seg"><button id="mk-print">Printed · 18 cm</button><button id="mk-screen">Screen · 15 cm</button></div>
+    <div id="markerinfo"></div>
+    <button id="mk-show" class="go localonly">Show marker on this screen</button>
+  </section>
+  <section class="adminonly">
+    <h2>Saved maps</h2>
+    <div class="mapsave"><input id="mapname" maxlength="40" placeholder="Name, e.g. Ground floor"><button id="mapsave" class="primary">Save map</button></div>
+    <ul id="maplist"></ul>
+  </section>
+  <section class="adminonly">
+    <h2>Recording (opt-in)</h2>
+    <div id="recstatus"></div>
+    <div class="row"><button id="recbtn">Record session</button><button id="capbtn">Room capture (90 s)</button></div>
+  </section>
+  <section class="adminonly localonly">
+    <h2>Voice guidance (phones)</h2>
+    <div class="dim small">Phones speak trip hazards, doors, turns and alerts. With an ElevenLabs key they use its natural voice; without one, the phone's own voice.</div>
+    <div id="vcstatus" class="small"></div>
+    <form id="vcform" class="mapsave" hidden>
+      <input id="vckey" type="password" autocomplete="off" placeholder="ElevenLabs API key">
+      <input id="vcvoice" autocomplete="off" maxlength="40" placeholder="Voice ID (optional)">
+      <button id="vcsave" class="primary" type="submit">Save</button>
+    </form>
+    <button id="vcchange" class="link" hidden>Change key</button>
+  </section>
+  <section class="adminonly localonly">
+    <h2>Other computers</h2>
+    <div class="dim small">Show this commander page in Chrome on another laptop on the same Wi-Fi.</div>
+    <button id="scradd">+ Add a computer</button>
+    <div id="scrbox" hidden>
+      <div id="scrqr"></div>
+      <div id="scrurl"></div>
+      <div id="scrinfo"></div>
+    </div>
+    <ul id="screens"></ul>
+  </section>
+  <section class="adminonly">
+    <h2>Paired devices</h2>
+    <ul id="devices"></ul>
+  </section>
+  <section>
+    <h2>Map</h2>
+    <div id="stats"></div>
+    <div class="legend">
+      <span><i class="lw wall"></i>wall</span><span><i class="lw door"></i>door</span>
+      <span><i class="lw window"></i>window</span><span><i class="lw floor"></i>floor</span>
+    </div>
+    <button id="reset" class="danger adminonly">Clear map</button>
+  </section>
+</aside>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
